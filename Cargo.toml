@@ -1,0 +1,15 @@
+[package]
+name = "keyrock-task"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+solana-client = "1.17.13"
+solana-program = "1.17.13"
+pyth-sdk-solana = "0.9.0"
+tokio = { version = "1.35.1", features = ["full"] }
+tokio-tungstenite = { version = "0.21.0", features = ["native-tls"] }
+futures-util = "0.3.29"
+anyhow = "1.0.76"
+
+ 
