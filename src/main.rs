@@ -6,19 +6,16 @@ use std::{
 };
 
 use pyth_sdk_solana::Price;
-use solana_client::rpc_client::RpcClient;
 use solana_program::pubkey::Pubkey;
 use structs::{
     cex::binance::{Binance, BookTickerData},
+    on_chain::pyth::Pyth,
     state::State,
 };
 use tokio::sync::RwLock;
 
-use crate::structs::cex::binance::BinanceResponse;
-
 mod structs;
 
-const PYTH_RPC_URL: &str = "http:/pythnet.rpcpool.com";
 const PYTH_SOL_USD_PRICE_ID: &str = "H6ARHf6YXhGYeQfUzQNGk6rDNnLBQKrenN712K4AQJEG";
 
 #[tokio::main]
@@ -41,32 +38,18 @@ async fn main() {
         }
     });
 
-    loop {
-        // sleep(Duration::from_millis(50));
-        // let pyth_price_read = *state.get_latest_pyth_price().read().await;
-        // println!("{:?}", pyth_price_read);
-    }
+    loop {}
 }
 
 async fn update_last_pyth_price(latest_pyth_price: Arc<RwLock<Option<Price>>>) {
-    let solana_rpc_client = RpcClient::new(PYTH_RPC_URL);
+    let pyth = Pyth::new();
     let sol_usd_price_key =
         Pubkey::from_str(PYTH_SOL_USD_PRICE_ID).expect("Could not parse pubkey");
 
     loop {
-        let mut sol_usd_price_account = solana_rpc_client.get_account(&sol_usd_price_key).unwrap();
-        let sol_price_feed = pyth_sdk_solana::load_price_feed_from_account(
-            &sol_usd_price_key,
-            &mut sol_usd_price_account,
-        )
-        .unwrap();
-
-        let current_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        let maybe_price = sol_price_feed.get_price_no_older_than(current_time, 60);
+        let maybe_price = pyth
+            .get_price(&sol_usd_price_key)
+            .expect("Could not load price feed from account");
         let mut latest_pyth_price_write = latest_pyth_price.write().await;
         *latest_pyth_price_write = maybe_price;
     }

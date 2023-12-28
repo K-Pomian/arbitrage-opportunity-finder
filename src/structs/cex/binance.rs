@@ -8,7 +8,7 @@ use futures_util::{
 use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
-    tungstenite::{handshake::client::Response, Error, Message},
+    tungstenite::{handshake::client::Response, Message},
     MaybeTlsStream, WebSocketStream,
 };
 
