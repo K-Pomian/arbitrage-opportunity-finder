@@ -14,18 +14,27 @@ use tokio_tungstenite::{
 
 const BINANCE_WEBSOCKET_URL: &str = "wss://stream.binance.com:9443/stream";
 
+/*
+    Struct representing Binance CEX responsible for connecting to Binance WS and fetching data about provided ticker/pair
+*/
 pub struct Binance {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
     read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
 }
 
 impl Binance {
+    /*
+        Connects to the WS
+    */
     pub async fn connect() -> Result<(Self, Response)> {
         let (socket, response) = tokio_tungstenite::connect_async(BINANCE_WEBSOCKET_URL).await?;
         let (write, read) = socket.split();
         Ok((Self { write, read }, response))
     }
 
+    /*
+        Subscribes to the stream providing data about the ticker/pair
+    */
     pub async fn subscribe_to_ticker(&mut self, ticker: &str) -> Result<u128> {
         let current_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -43,6 +52,9 @@ impl Binance {
         Ok(current_timestamp)
     }
 
+    /*
+        Reads the next element of the stream and parses the JSON into BinanceResponse object
+    */
     pub async fn read_next_message(&mut self) -> Option<BinanceResponse> {
         self.read
             .next()
@@ -59,6 +71,10 @@ impl Binance {
             .await
     }
 }
+
+/*
+    Structs representing JSON messages from the stream
+*/
 
 #[derive(Debug, Deserialize)]
 pub struct BinanceResponse {
