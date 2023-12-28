@@ -5,38 +5,21 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use futures_util::{SinkExt, StreamExt};
 use pyth_sdk_solana::Price;
-use serde::Deserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_program::pubkey::Pubkey;
-use structs::state::State;
+use structs::{
+    cex::binance::{Binance, BookTickerData},
+    state::State,
+};
 use tokio::sync::RwLock;
-use tokio_tungstenite::tungstenite::Message;
+
+use crate::structs::cex::binance::BinanceResponse;
 
 mod structs;
 
 const PYTH_RPC_URL: &str = "http:/pythnet.rpcpool.com";
 const PYTH_SOL_USD_PRICE_ID: &str = "H6ARHf6YXhGYeQfUzQNGk6rDNnLBQKrenN712K4AQJEG";
-
-const BINANCE_WEBSOCKET_URL: &str = "wss://stream.binance.com:9443/stream";
-
-#[derive(Debug, Deserialize)]
-pub struct BinanceResponse {
-    pub stream: String,
-    pub data: BookTickerData,
-}
-
-#[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
-pub struct BookTickerData {
-    pub u: u64,    // order book updateId
-    pub s: String, // symbol
-    pub b: String, // best bid price
-    pub B: String, // best bid quantity
-    pub a: String, // best ask price
-    pub A: String, // best ask quantity
-}
 
 #[tokio::main]
 async fn main() {
@@ -90,31 +73,15 @@ async fn update_last_pyth_price(latest_pyth_price: Arc<RwLock<Option<Price>>>) {
 }
 
 async fn update_last_cex_price(latest_cex_price: Arc<RwLock<Option<BookTickerData>>>) {
-    let (socket, _) = tokio_tungstenite::connect_async(BINANCE_WEBSOCKET_URL)
+    let (mut binance, _) = Binance::connect()
         .await
-        .expect("Could not connect");
-    let (mut write, mut read) = socket.split();
+        .expect("Could not connect to Binance WS");
+    binance
+        .subscribe_to_ticker("solusdt")
+        .await
+        .expect("Could not subscribe to the ticker");
 
-    let current_timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
-    let subscribe_request = format!(
-        "{{\"method\":\"SUBSCRIBE\",\"params\":[\"btcusdt@bookTicker\"],\"id\":{}}}",
-        current_timestamp
-    );
-    println!("{}", subscribe_request);
-    let message = Message::Text(subscribe_request);
-
-    write.send(message).await.unwrap();
-    read.next().await; // The first message is a response to the subscribe request
-
-    while let Some(inner) = read.next().await {
-        let message = inner.unwrap().into_data();
-        let message_str = String::from_utf8(message).unwrap();
-
-        let binance_response =
-            serde_json::from_str::<BinanceResponse>(message_str.as_str()).unwrap();
+    while let Some(binance_response) = binance.read_next_message().await {
         println!("{:?}", binance_response);
 
         *latest_cex_price.write().await = Some(binance_response.data);
