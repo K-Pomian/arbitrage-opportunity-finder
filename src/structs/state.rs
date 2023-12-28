@@ -3,7 +3,7 @@ use std::sync::Arc;
 use pyth_sdk_solana::Price;
 use tokio::sync::RwLock;
 
-use crate::BookTickerData;
+use super::cex::binance::BookTickerData;
 
 pub struct State {
     latest_pyth_price: Arc<RwLock<Option<Price>>>,
