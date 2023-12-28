@@ -6,7 +6,7 @@ use futures_util::{
     FutureExt, SinkExt, StreamExt,
 };
 use serde::Deserialize;
-use tokio::net::TcpStream;
+use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{
     tungstenite::{handshake::client::Response, Message},
     MaybeTlsStream, WebSocketStream,
@@ -19,7 +19,7 @@ const BINANCE_WEBSOCKET_URL: &str = "wss://stream.binance.com:9443/stream";
 */
 pub struct Binance {
     write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
-    read: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    read: RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
 }
 
 impl Binance {
@@ -29,7 +29,13 @@ impl Binance {
     pub async fn connect() -> Result<(Self, Response)> {
         let (socket, response) = tokio_tungstenite::connect_async(BINANCE_WEBSOCKET_URL).await?;
         let (write, read) = socket.split();
-        Ok((Self { write, read }, response))
+        Ok((
+            Self {
+                write,
+                read: RwLock::new(read),
+            },
+            response,
+        ))
     }
 
     /*
@@ -47,7 +53,8 @@ impl Binance {
         let message = Message::Text(subscribe_request);
 
         self.write.send(message).await?;
-        self.read.next().await; // The first message is a response to the subscribe request
+
+        self.read.write().await.next().await; // The first message is a response to the subscribe request
 
         Ok(current_timestamp)
     }
@@ -55,8 +62,10 @@ impl Binance {
     /*
         Reads the next element of the stream and parses the JSON into BinanceResponse object
     */
-    pub async fn read_next_message(&mut self) -> Option<BinanceResponse> {
+    pub async fn read_next_message(&self) -> Option<BinanceResponse> {
         self.read
+            .write()
+            .await
             .next()
             .then(|element| async {
                 if let Some(result) = element {
