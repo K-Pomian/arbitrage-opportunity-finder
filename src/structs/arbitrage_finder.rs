@@ -22,6 +22,7 @@ impl ArbitrageFinder {
         &mut self,
         latest_pyth_price: Arc<RwLock<Option<Price>>>,
         latest_binance_ticker_data: Arc<RwLock<Option<BookTickerData>>>,
+        binance_fee: Decimal,
     ) -> Option<ArbitrageOpportunity> {
         let (latest_pyth_price_read, latest_binance_ticker_data_read) =
             tokio::join!(latest_pyth_price.read(), latest_binance_ticker_data.read());
@@ -42,12 +43,23 @@ impl ArbitrageFinder {
         let binance_best_bid_price = Decimal::from_str(&binance_ticker_data.b).unwrap();
         if binance_best_bid_price.gt(&pyth_confident_95_price_higher) {
             let quantity = Decimal::from_str(&binance_ticker_data.B).unwrap();
+            let estimated_profit = (binance_best_bid_price - pyth_confident_95_price_higher)
+                .checked_mul(quantity)
+                .unwrap()
+                - quantity
+                    .checked_mul(binance_best_bid_price)
+                    .unwrap()
+                    .checked_mul(binance_fee)
+                    .unwrap();
+
+            if estimated_profit.le(&Decimal::ZERO) {
+                return None;
+            }
+
             let opportunity = ArbitrageOpportunity {
                 direction: ArbitrageDirection::SellBinanceBuyDex,
                 quantity,
-                estimated_profit: (binance_best_bid_price - pyth_confident_95_price_higher)
-                    .checked_mul(quantity)
-                    .unwrap(),
+                estimated_profit,
                 binance_price: binance_best_bid_price,
                 pyth_price: pyth_confident_95_price_higher,
             };
@@ -66,12 +78,23 @@ impl ArbitrageFinder {
         let binance_best_ask_price = Decimal::from_str(&binance_ticker_data.a).unwrap();
         if binance_best_ask_price.lt(&pyth_confident_95_price_lower) {
             let quantity = Decimal::from_str(&binance_ticker_data.A).unwrap();
+            let estimated_profit = (pyth_confident_95_price_lower - binance_best_ask_price)
+                .checked_mul(quantity)
+                .unwrap()
+                - quantity
+                    .checked_mul(binance_fee)
+                    .unwrap()
+                    .checked_mul(binance_best_ask_price)
+                    .unwrap();
+
+            if estimated_profit.le(&Decimal::ZERO) {
+                return None;
+            }
+
             let opportunity = ArbitrageOpportunity {
                 direction: ArbitrageDirection::BuyBinanceSellDex,
                 quantity,
-                estimated_profit: (pyth_confident_95_price_lower - binance_best_ask_price)
-                    .checked_mul(quantity)
-                    .unwrap(),
+                estimated_profit,
                 binance_price: binance_best_ask_price,
                 pyth_price: pyth_confident_95_price_lower,
             };
@@ -155,7 +178,11 @@ mod tests {
         // Both none
         {
             let result = arbitrage_finder
-                .find_opportunity(Arc::new(RwLock::new(None)), Arc::new(RwLock::new(None)))
+                .find_opportunity(
+                    Arc::new(RwLock::new(None)),
+                    Arc::new(RwLock::new(None)),
+                    Decimal::default(),
+                )
                 .await;
             assert!(result.is_none());
         }
@@ -166,6 +193,7 @@ mod tests {
                 .find_opportunity(
                     Arc::new(RwLock::new(Some(Price::default()))),
                     Arc::new(RwLock::new(None)),
+                    Decimal::default(),
                 )
                 .await;
             assert!(result.is_none());
@@ -177,6 +205,7 @@ mod tests {
                 .find_opportunity(
                     Arc::new(RwLock::new(None)),
                     Arc::new(RwLock::new(Some(BookTickerData::default()))),
+                    Decimal::default(),
                 )
                 .await;
             assert!(result.is_none());
@@ -197,7 +226,7 @@ mod tests {
                 ..Default::default()
             })));
             let latest_binance_ticker_data = Arc::new(RwLock::new(Some(BookTickerData {
-                b: "71.2833".to_string(),
+                b: "71.3833".to_string(),
                 B: "0.8574".to_string(),
                 a: "72.0012".to_string(),
                 A: "0.9245".to_string(),
@@ -205,15 +234,46 @@ mod tests {
             })));
 
             let result = arbitrage_finder
-                .find_opportunity(latest_pyth_price, latest_binance_ticker_data)
+                .find_opportunity(
+                    latest_pyth_price,
+                    latest_binance_ticker_data,
+                    Decimal::new(1, 3),
+                )
                 .await
                 .unwrap();
             assert_eq!(result.direction, ArbitrageDirection::SellBinanceBuyDex);
             assert_eq!(result.quantity, Decimal::from_str("0.8574").unwrap());
             assert_eq!(
                 result.estimated_profit.normalize(),
-                Decimal::from_str("0.009465798888").unwrap()
+                Decimal::from_str("0.034001757468").unwrap()
             );
+        }
+
+        // SellBinanceBuyDex direction, but too large fee
+        {
+            // l: 68.43263012 h: 71.27225988
+            let latest_pyth_price = Arc::new(RwLock::new(Some(Price {
+                price: 69852445,
+                conf: 669724,
+                expo: -6,
+                ..Default::default()
+            })));
+            let latest_binance_ticker_data = Arc::new(RwLock::new(Some(BookTickerData {
+                b: "71.3833".to_string(),
+                B: "0.8574".to_string(),
+                a: "72.0012".to_string(),
+                A: "0.9245".to_string(),
+                ..Default::default()
+            })));
+
+            let result = arbitrage_finder
+                .find_opportunity(
+                    latest_pyth_price,
+                    latest_binance_ticker_data,
+                    Decimal::new(5, 3),
+                )
+                .await;
+            assert!(result.is_none())
         }
 
         // BuyBinanceSellDex direction
@@ -234,15 +294,46 @@ mod tests {
             })));
 
             let result = arbitrage_finder
-                .find_opportunity(latest_pyth_price, latest_binance_ticker_data)
+                .find_opportunity(
+                    latest_pyth_price,
+                    latest_binance_ticker_data,
+                    Decimal::new(1, 3),
+                )
                 .await
                 .unwrap();
             assert_eq!(result.direction, ArbitrageDirection::BuyBinanceSellDex);
             assert_eq!(result.quantity, Decimal::from_str("2.5569").unwrap());
             assert_eq!(
                 result.estimated_profit.normalize(),
-                Decimal::from_str("1.509415083828").unwrap()
+                Decimal::from_str("1.335949106958").unwrap()
             );
+        }
+
+        // BuyBinanceSellDex direction, but too large fee
+        {
+            // l: 68.43263012 h: 71.27225988
+            let latest_pyth_price = Arc::new(RwLock::new(Some(Price {
+                price: 69852445,
+                conf: 669724,
+                expo: -6,
+                ..Default::default()
+            })));
+            let latest_binance_ticker_data = Arc::new(RwLock::new(Some(BookTickerData {
+                b: "67.5421".to_string(),
+                B: "1.1258".to_string(),
+                a: "67.8423".to_string(),
+                A: "2.5569".to_string(),
+                ..Default::default()
+            })));
+
+            let result = arbitrage_finder
+                .find_opportunity(
+                    latest_pyth_price,
+                    latest_binance_ticker_data,
+                    Decimal::new(1, 2),
+                )
+                .await;
+            assert!(result.is_none());
         }
 
         // No opportunity found
@@ -263,7 +354,11 @@ mod tests {
             })));
 
             let result = arbitrage_finder
-                .find_opportunity(latest_pyth_price, latest_binance_ticker_data)
+                .find_opportunity(
+                    latest_pyth_price,
+                    latest_binance_ticker_data,
+                    Decimal::new(1, 3),
+                )
                 .await;
             assert!(result.is_none());
         }
