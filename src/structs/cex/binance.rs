@@ -92,7 +92,7 @@ pub struct BinanceResponse {
 }
 
 #[allow(non_snake_case)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct BookTickerData {
     pub u: u64,    // order book updateId
     pub s: String, // symbol
