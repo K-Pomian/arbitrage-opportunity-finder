@@ -8,12 +8,14 @@ mod structs;
 
 #[tokio::main]
 async fn main() {
-    handle_pyth_price_update();
-    handle_binance_ticker_data_update();
-    handle_finding_arbitrage_opportunities();
+    handle_pyth_price_update().await;
+    handle_binance_ticker_data_update().await;
+    handle_finding_arbitrage_opportunities().await;
 }
 
-fn handle_pyth_price_update() {
+async fn handle_pyth_price_update() {
+    println!("Spawning Pyth price updater");
+
     tokio::spawn({
         let state = STATE.get_or_init(|| async { State::new().await }).await;
 
@@ -25,7 +27,9 @@ fn handle_pyth_price_update() {
     });
 }
 
-fn handle_binance_ticker_data_update() {
+async fn handle_binance_ticker_data_update() {
+    println!("Spawning Binance ticker data updater");
+
     tokio::spawn({
         let state = STATE.get_or_init(|| async { State::new().await }).await;
 
@@ -37,7 +41,9 @@ fn handle_binance_ticker_data_update() {
     });
 }
 
-fn handle_finding_arbitrage_opportunities() {
+async fn handle_finding_arbitrage_opportunities() {
+    println!("Searching for arbitrage opportunities");
+
     let state = STATE.get_or_init(|| async { State::new().await }).await;
     let mut arbitrage_finder = ArbitrageFinder::new();
 
