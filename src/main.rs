@@ -8,6 +8,12 @@ mod structs;
 
 #[tokio::main]
 async fn main() {
+    handle_pyth_price_update();
+    handle_binance_ticker_data_update();
+    handle_finding_arbitrage_opportunities();
+}
+
+fn handle_pyth_price_update() {
     tokio::spawn({
         let state = STATE.get_or_init(|| async { State::new().await }).await;
 
@@ -17,7 +23,9 @@ async fn main() {
             }
         }
     });
+}
 
+fn handle_binance_ticker_data_update() {
     tokio::spawn({
         let state = STATE.get_or_init(|| async { State::new().await }).await;
 
@@ -27,7 +35,9 @@ async fn main() {
             }
         }
     });
+}
 
+fn handle_finding_arbitrage_opportunities() {
     let state = STATE.get_or_init(|| async { State::new().await }).await;
     let mut arbitrage_finder = ArbitrageFinder::new();
 
