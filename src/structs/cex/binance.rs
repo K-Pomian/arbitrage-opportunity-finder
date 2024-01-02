@@ -18,7 +18,7 @@ const BINANCE_WEBSOCKET_URL: &str = "wss://stream.binance.com:9443/stream";
     Struct representing Binance CEX responsible for connecting to Binance WS and fetching data about provided ticker/pair
 */
 pub struct Binance {
-    write: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+    write: RwLock<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>>,
     read: RwLock<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
 }
 
