@@ -52,11 +52,8 @@ impl ArbitrageFinder {
                 pyth_price: pyth_confident_95_price_higher,
             };
 
-            if let Some((last_opportunity, pyth_price, binance_price)) = self.last_found {
-                if last_opportunity == opportunity
-                    && pyth_price == pyth_confident_95_price_higher
-                    && binance_best_bid_price == binance_price
-                {
+            if let Some(last_opportunity) = self.last_found {
+                if last_opportunity == opportunity {
                     return None;
                 }
             }
@@ -79,11 +76,8 @@ impl ArbitrageFinder {
                 pyth_price: pyth_confident_95_price_lower,
             };
 
-            if let Some((last_opportunity, pyth_price, binance_price)) = self.last_found {
-                if last_opportunity == opportunity
-                    && pyth_price == pyth_confident_95_price_lower
-                    && binance_best_ask_price == binance_price
-                {
+            if let Some(last_opportunity) = self.last_found {
+                if last_opportunity == opportunity {
                     return None;
                 }
             }
@@ -156,7 +150,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_opportunity_data_none() {
-        let arbitrage_finder = ArbitrageFinder::new();
+        let mut arbitrage_finder = ArbitrageFinder::new();
 
         // Both none
         {
@@ -191,7 +185,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_opportunity() {
-        let arbitrage_finder = ArbitrageFinder::new();
+        let mut arbitrage_finder = ArbitrageFinder::new();
 
         // SellBinanceBuyDex direction
         {
