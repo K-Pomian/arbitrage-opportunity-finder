@@ -52,6 +52,7 @@ async fn handle_finding_arbitrage_opportunities() {
             .find_opportunity(
                 state.get_latest_pyth_price(),
                 state.get_latest_binance_ticker_data(),
+                state.binance_taker_fee,
             )
             .await;
         if let Some(opportunity) = maybe_opportunity {
