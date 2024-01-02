@@ -27,10 +27,7 @@ impl State {
         let (mut binance, _) = Binance::connect()
             .await
             .expect("Could not connect to Binance WS");
-        binance
-            .subscribe_to_ticker(&config.binance_ticker)
-            .await
-            .unwrap();
+        binance.subscribe_to_ticker(&config.binance_ticker).await;
 
         Self {
             pyth: Pyth::new(),

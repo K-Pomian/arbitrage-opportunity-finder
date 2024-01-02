@@ -41,22 +41,21 @@ impl Binance {
     /*
         Subscribes to the stream providing data about the ticker/pair
     */
-    pub async fn subscribe_to_ticker(&mut self, ticker: &str) -> Result<u128> {
+    pub async fn subscribe_to_ticker(&mut self, ticker: &str) -> u64 {
         let current_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_millis();
+            .as_millis() as u64; // don't overflow
         let subscribe_request = format!(
             "{{\"method\":\"SUBSCRIBE\",\"params\":[\"{}@bookTicker\"],\"id\":{}}}",
             ticker, current_timestamp
         );
         let message = Message::Text(subscribe_request);
 
-        self.write.write().await.send(message).await?;
+        self.write.write().await.send(message).await.unwrap();
+        self.read.write().await.next().await.unwrap().unwrap(); // The first message is a response to the subscribe request
 
-        self.read.write().await.next().await; // The first message is a response to the subscribe request
-
-        Ok(current_timestamp)
+        current_timestamp
     }
 
     /*
@@ -111,4 +110,49 @@ pub struct BookTickerData {
     pub B: String, // best bid quantity
     pub a: String, // best ask price
     pub A: String, // best ask quantity
+}
+
+#[cfg(test)]
+mod test {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use tokio_tungstenite::tungstenite::http::StatusCode;
+
+    use super::Binance;
+
+    #[tokio::test]
+    async fn test_connect() {
+        let (_, response) = Binance::connect().await.unwrap();
+        assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
+    }
+
+    #[tokio::test]
+    async fn test_subscribe_to_ticker() {
+        let (mut binance, _) = Binance::connect().await.unwrap();
+        let id = binance.subscribe_to_ticker("btcusdt").await;
+        assert!(
+            id <= SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64
+        );
+    }
+
+    #[tokio::test]
+    async fn test_read_next_message_no_subscription() {
+        let (binance, _) = Binance::connect().await.unwrap();
+        let result =
+            tokio::time::timeout(Duration::from_secs(1), binance.read_next_message()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_read_next_message() {
+        let (mut binance, _) = Binance::connect().await.unwrap();
+        binance.subscribe_to_ticker("btcusdt").await;
+
+        let next_message = binance.read_next_message().await.unwrap();
+        assert_eq!(next_message.stream, "btcusdt@bookTicker".to_string());
+        assert_eq!(next_message.data.s, "BTCUSDT".to_string());
+    }
 }
