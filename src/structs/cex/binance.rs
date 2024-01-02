@@ -31,7 +31,7 @@ impl Binance {
         let (write, read) = socket.split();
         Ok((
             Self {
-                write,
+                write: RwLock::new(write),
                 read: RwLock::new(read),
             },
             response,
@@ -52,7 +52,7 @@ impl Binance {
         );
         let message = Message::Text(subscribe_request);
 
-        self.write.send(message).await?;
+        self.write.write().await.send(message).await?;
 
         self.read.write().await.next().await; // The first message is a response to the subscribe request
 
@@ -69,8 +69,19 @@ impl Binance {
             .next()
             .then(|element| async {
                 if let Some(result) = element {
-                    let message = result.unwrap().into_data();
-                    let message_str = String::from_utf8(message).unwrap();
+                    let message = result.unwrap();
+
+                    if let Message::Ping(ping) = message {
+                        self.write
+                            .write()
+                            .await
+                            .send(Message::Pong(ping))
+                            .await
+                            .unwrap();
+                        return None;
+                    }
+
+                    let message_str = String::from_utf8(message.into_data()).unwrap();
 
                     return Some(serde_json::from_str::<BinanceResponse>(&message_str).unwrap());
                 }
