@@ -14,4 +14,4 @@ The default values for the arguments are respectively `solusdt` and `H6ARHf6YXhG
 
 # Additional information
 Full list of Binance tickers can be found [here](https://api.binance.com/api/v3/exchangeInfo).  
-Full list of Pyth's Solana price accounts' pubkeys can be found [here](https://pyth.network/price-feeds?cluster=solana-mainnet-beta)
+Full list of Pyth's Solana price accounts' pubkeys can be found [here](https://pyth.network/price-feeds?cluster=solana-mainnet-beta).
