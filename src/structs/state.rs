@@ -24,6 +24,7 @@ pub struct State {
     latest_pyth_price: Arc<RwLock<Option<Price>>>,
     latest_binance_ticker_data: Arc<RwLock<Option<BookTickerData>>>,
     pub binance_taker_fee: Decimal,
+    pub subscription_id: i64,
 }
 
 impl State {
@@ -32,10 +33,13 @@ impl State {
     */
     pub async fn new() -> Self {
         let config = CONFIG.get_or_init(|| async { Config::new() }).await;
-        let (mut binance, _) = Binance::connect()
+        let (binance, _) = Binance::connect()
             .await
             .expect("Could not connect to Binance WS");
-        binance.subscribe_to_ticker(&config.binance_ticker).await;
+        let subscription_id = binance
+            .subscribe_to_ticker(&config.binance_ticker)
+            .await
+            .unwrap();
 
         Self {
             pyth: Pyth::new(),
@@ -48,6 +52,7 @@ impl State {
             } else {
                 Decimal::new(1, 3)
             },
+            subscription_id,
         }
     }
 
@@ -83,6 +88,17 @@ impl State {
         if let Some(binance_response) = self.binance.read_next_message().await {
             *self.latest_binance_ticker_data.write().await = Some(binance_response.data);
         }
+    }
+
+    /*
+        Unsubscribes from the Binance WS ticker stream
+    */
+    pub async fn terminate(&self) {
+        let config = CONFIG.get().unwrap();
+        self.binance
+            .unsubscribe(&config.binance_ticker, self.subscription_id)
+            .await
+            .unwrap();
     }
 }
 

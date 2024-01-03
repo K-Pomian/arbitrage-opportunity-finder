@@ -1,12 +1,12 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     FutureExt, SinkExt, StreamExt,
 };
 use serde::Deserialize;
-use tokio::{net::TcpStream, sync::RwLock};
+use tokio::{net::TcpStream, sync::RwLock, time::Instant};
 use tokio_tungstenite::{
     tungstenite::{handshake::client::Response, Message},
     MaybeTlsStream, WebSocketStream,
@@ -41,11 +41,11 @@ impl Binance {
     /*
         Subscribes to the stream providing data about the ticker/pair
     */
-    pub async fn subscribe_to_ticker(&mut self, ticker: &str) -> u64 {
+    pub async fn subscribe_to_ticker(&self, ticker: &str) -> Result<i64> {
         let current_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_millis() as u64; // don't overflow
+            .as_millis() as i64; // doesn't overflow
         let subscribe_request = format!(
             "{{\"method\":\"SUBSCRIBE\",\"params\":[\"{}@bookTicker\"],\"id\":{}}}",
             ticker, current_timestamp
@@ -53,9 +53,46 @@ impl Binance {
         let message = Message::Text(subscribe_request);
 
         self.write.write().await.send(message).await.unwrap();
-        self.read.write().await.next().await.unwrap().unwrap(); // The first message is a response to the subscribe request
+        let maybe_result = self.read.write().await.next().await; // The first message is a response to the subscribe request
 
-        current_timestamp
+        if let Some(inner) = maybe_result {
+            let message = String::from_utf8(inner.unwrap().into_data()).unwrap();
+            if !message.contains("\"result\":null") {
+                return Err(anyhow!(format!(
+                    "Could not subscribe for ticker {}: {}",
+                    ticker, message
+                )));
+            }
+        }
+
+        Ok(current_timestamp)
+    }
+
+    pub async fn unsubscribe(&self, ticker: &str, id: i64) -> Result<()> {
+        let unsubscribe_request = format!(
+            "{{\"method\":\"UNSUBSCRIBE\",\"params\":[\"{}@bookTicker\"],\"id\":{}}}",
+            ticker, id
+        );
+        let message = Message::Text(unsubscribe_request);
+        self.write.write().await.send(message).await.unwrap();
+
+        let mut read_write_lock = self.read.write().await;
+
+        let deadline = Instant::now() + Duration::from_millis(100);
+        let future = read_write_lock.next();
+        let error_context = format!("Could not unsubscribe for ticker {} and id {}", ticker, id);
+
+        while let Some(inner) = tokio::time::timeout_at(deadline, future)
+            .await
+            .context(error_context)?
+        {
+            let message = String::from_utf8(inner.unwrap().into_data()).unwrap();
+            if message.contains("\"result\":null") {
+                return Ok(());
+            }
+        }
+
+        unreachable!();
     }
 
     /*
@@ -128,13 +165,13 @@ mod test {
 
     #[tokio::test]
     async fn test_subscribe_to_ticker() {
-        let (mut binance, _) = Binance::connect().await.unwrap();
-        let id = binance.subscribe_to_ticker("btcusdt").await;
+        let (binance, _) = Binance::connect().await.unwrap();
+        let id = binance.subscribe_to_ticker("btcusdt").await.unwrap();
         assert!(
             id <= SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_millis() as u64
+                .as_millis() as i64
         );
     }
 
@@ -148,8 +185,8 @@ mod test {
 
     #[tokio::test]
     async fn test_read_next_message() {
-        let (mut binance, _) = Binance::connect().await.unwrap();
-        binance.subscribe_to_ticker("btcusdt").await;
+        let (binance, _) = Binance::connect().await.unwrap();
+        binance.subscribe_to_ticker("btcusdt").await.unwrap();
 
         let next_message = binance.read_next_message().await.unwrap();
         assert_eq!(next_message.stream, "btcusdt@bookTicker".to_string());
