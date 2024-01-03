@@ -1,12 +1,12 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     FutureExt, SinkExt, StreamExt,
 };
 use serde::Deserialize;
-use tokio::{net::TcpStream, sync::RwLock, time::Instant};
+use tokio::{net::TcpStream, sync::RwLock};
 use tokio_tungstenite::{
     tungstenite::{handshake::client::Response, Message},
     MaybeTlsStream, WebSocketStream,
@@ -77,27 +77,24 @@ impl Binance {
             ticker, id
         );
         let message = Message::Text(unsubscribe_request);
-        self.write.write().await.send(message).await.unwrap();
+
+        let mut write_write_lock = self.write.write().await;
+        write_write_lock.send(message).await.unwrap();
+        write_write_lock.close().await.unwrap();
+        drop(write_write_lock);
 
         let mut read_write_lock = self.read.write().await;
-
-        // Long deadline, bc timeout seems to mess up `read_write_lock.next()` completion time in debug mode
-        // and it's not critical for application performance, as unsubscribe is called only while terminating the application process.
-        // Moreover, it's highly unlikely that different message than containing `"result": null` is the last one.
-        let deadline = Instant::now() + Duration::from_millis(500);
-        let error_context = format!("Could not unsubscribe for ticker {} and id {}", ticker, id);
-
-        while let Some(inner) = tokio::time::timeout_at(deadline, read_write_lock.next())
-            .await
-            .context(error_context.clone())?
-        {
+        while let Some(inner) = read_write_lock.next().await {
             let message = String::from_utf8(inner.unwrap().into_data()).unwrap();
             if message.contains("\"result\":null") {
                 return Ok(());
             }
         }
 
-        unreachable!();
+        Err(anyhow!(format!(
+            "Could not unsubscribe for ticker {} and id {}",
+            ticker, id
+        )))
     }
 
     /*
@@ -158,6 +155,7 @@ pub struct BookTickerData {
 mod test {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+    use futures_util::StreamExt;
     use tokio_tungstenite::tungstenite::http::StatusCode;
 
     use super::Binance;
@@ -178,6 +176,16 @@ mod test {
                 .unwrap()
                 .as_millis() as i64
         );
+    }
+
+    #[tokio::test]
+    async fn test_unsubscribe() {
+        let (binance, _) = Binance::connect().await.unwrap();
+        let id = binance.subscribe_to_ticker("btcusdt").await.unwrap();
+        binance.unsubscribe("btcusdt", id).await.unwrap();
+
+        let _ = binance.read.write().await.next().await;
+        assert_eq!(binance.read.into_inner().count().await, 0);
     }
 
     #[tokio::test]
