@@ -37,76 +37,32 @@ impl ArbitrageFinder {
         drop(latest_binance_ticker_data_read);
 
         let (pyth_confident_95_price_higher, pyth_confident_95_price_lower) =
-            self.get_pyth_confident_95_price(pyth_price);
+            self.calculate_pyth_confident_95_price(pyth_price);
 
         // Search for SellBinanceBuyDex opportunity
         let binance_best_bid_price = Decimal::from_str(&binance_ticker_data.b).unwrap();
         if binance_best_bid_price.gt(&pyth_confident_95_price_higher) {
             let quantity = Decimal::from_str(&binance_ticker_data.B).unwrap();
-            let estimated_profit = (binance_best_bid_price - pyth_confident_95_price_higher)
-                .checked_mul(quantity)
-                .unwrap()
-                - quantity
-                    .checked_mul(binance_best_bid_price)
-                    .unwrap()
-                    .checked_mul(binance_fee)
-                    .unwrap();
-
-            if estimated_profit.le(&Decimal::ZERO) {
-                return None;
-            }
-
-            let opportunity = ArbitrageOpportunity {
-                direction: ArbitrageDirection::SellBinanceBuyDex,
+            return self.calculate_arbitrage_opportunity(
+                binance_best_bid_price,
+                pyth_confident_95_price_higher,
+                binance_fee,
                 quantity,
-                estimated_profit,
-                binance_price: binance_best_bid_price,
-                pyth_price: pyth_confident_95_price_higher,
-            };
-
-            if let Some(last_opportunity) = self.last_found {
-                if last_opportunity == opportunity {
-                    return None;
-                }
-            }
-            self.last_found = Some(opportunity);
-
-            return self.last_found;
+                ArbitrageDirection::SellBinanceBuyDex,
+            );
         }
 
         // Search for BuyBinanceSellDex opportunity
         let binance_best_ask_price = Decimal::from_str(&binance_ticker_data.a).unwrap();
         if binance_best_ask_price.lt(&pyth_confident_95_price_lower) {
             let quantity = Decimal::from_str(&binance_ticker_data.A).unwrap();
-            let estimated_profit = (pyth_confident_95_price_lower - binance_best_ask_price)
-                .checked_mul(quantity)
-                .unwrap()
-                - quantity
-                    .checked_mul(binance_fee)
-                    .unwrap()
-                    .checked_mul(binance_best_ask_price)
-                    .unwrap();
-
-            if estimated_profit.le(&Decimal::ZERO) {
-                return None;
-            }
-
-            let opportunity = ArbitrageOpportunity {
-                direction: ArbitrageDirection::BuyBinanceSellDex,
+            return self.calculate_arbitrage_opportunity(
+                binance_best_ask_price,
+                pyth_confident_95_price_lower,
+                binance_fee,
                 quantity,
-                estimated_profit,
-                binance_price: binance_best_ask_price,
-                pyth_price: pyth_confident_95_price_lower,
-            };
-
-            if let Some(last_opportunity) = self.last_found {
-                if last_opportunity == opportunity {
-                    return None;
-                }
-            }
-            self.last_found = Some(opportunity);
-
-            return self.last_found;
+                ArbitrageDirection::BuyBinanceSellDex,
+            );
         }
 
         None
@@ -116,7 +72,7 @@ impl ArbitrageFinder {
         Calculates probable (95%) price using Pyth price and confidence feed and Laplace distribution
         https://docs.pyth.network/documentation/solana-price-feeds/best-practices#confidence-intervals
     */
-    fn get_pyth_confident_95_price(&self, pyth_price: Price) -> (Decimal, Decimal) {
+    fn calculate_pyth_confident_95_price(&self, pyth_price: Price) -> (Decimal, Decimal) {
         let exponential = pyth_price.expo.abs() as u32;
         let price = Decimal::new(pyth_price.price, exponential);
         let confidence = Decimal::new(pyth_price.conf.try_into().unwrap(), exponential);
@@ -126,6 +82,46 @@ impl ArbitrageFinder {
             price.checked_add(confidence_95).unwrap(),
             price.checked_sub(confidence_95).unwrap(),
         )
+    }
+
+    fn calculate_arbitrage_opportunity(
+        &mut self,
+        binance_price: Decimal,
+        pyth_price: Decimal,
+        binance_fee: Decimal,
+        quantity: Decimal,
+        arbitrage_direction: ArbitrageDirection,
+    ) -> Option<ArbitrageOpportunity> {
+        let estimated_profit = (binance_price - pyth_price)
+            .abs()
+            .checked_mul(quantity)
+            .unwrap()
+            - quantity
+                .checked_mul(binance_price)
+                .unwrap()
+                .checked_mul(binance_fee)
+                .unwrap();
+
+        if estimated_profit.le(&Decimal::ZERO) {
+            return None;
+        }
+
+        let opportunity = ArbitrageOpportunity {
+            direction: arbitrage_direction,
+            quantity,
+            estimated_profit,
+            binance_price,
+            pyth_price,
+        };
+
+        if let Some(last_opportunity) = self.last_found {
+            if last_opportunity == opportunity {
+                return None;
+            }
+        }
+        self.last_found = Some(opportunity);
+
+        return self.last_found;
     }
 }
 
@@ -157,7 +153,7 @@ mod tests {
     use super::{ArbitrageDirection, ArbitrageFinder};
 
     #[test]
-    fn test_get_pyth_confident_95_price() {
+    fn test_calculate_pyth_confident_95_price() {
         let arbitrage_finder = ArbitrageFinder::new();
         let price = Price {
             price: 4856126854,
@@ -166,7 +162,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (higher, lower) = arbitrage_finder.get_pyth_confident_95_price(price);
+        let (higher, lower) = arbitrage_finder.calculate_pyth_confident_95_price(price);
         assert_eq!(lower.normalize().to_string(), "48548.284494");
         assert_eq!(higher.normalize().to_string(), "48574.252586");
     }
