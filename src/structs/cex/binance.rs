@@ -57,8 +57,11 @@ impl Binance {
 
         if let Some(inner) = maybe_result {
             let message = String::from_utf8(inner.unwrap().into_data()).unwrap();
-            if !message.contains("\"result\":\"null\"") {
-                return Err(format!("Could not subscribe for ticker {}", ticker));
+            if !message.contains("\"result\":null") {
+                return Err(anyhow!(format!(
+                    "Could not subscribe for ticker {}: {}",
+                    ticker, message
+                )));
             }
         }
 
