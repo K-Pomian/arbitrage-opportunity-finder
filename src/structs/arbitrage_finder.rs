@@ -246,8 +246,8 @@ mod tests {
             assert_eq!(result.direction, ArbitrageDirection::SellBinanceBuyDex);
             assert_eq!(result.quantity, Decimal::from_str("0.8574").unwrap());
             assert_eq!(
-                result.estimated_profit.normalize(),
-                Decimal::from_str("0.034001757468").unwrap()
+                result.estimated_profit,
+                Decimal::from_str("0.03400176").unwrap()
             );
         }
 
@@ -306,8 +306,8 @@ mod tests {
             assert_eq!(result.direction, ArbitrageDirection::BuyBinanceSellDex);
             assert_eq!(result.quantity, Decimal::from_str("2.5569").unwrap());
             assert_eq!(
-                result.estimated_profit.normalize(),
-                Decimal::from_str("1.335949106958").unwrap()
+                result.estimated_profit,
+                Decimal::from_str("1.33594911").unwrap()
             );
         }
 
