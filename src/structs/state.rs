@@ -35,7 +35,10 @@ impl State {
         let (binance, _) = Binance::connect()
             .await
             .expect("Could not connect to Binance WS");
-        binance.subscribe_to_ticker(&config.binance_ticker).await;
+        binance
+            .subscribe_to_ticker(&config.binance_ticker)
+            .await
+            .unwrap();
 
         Self {
             pyth: Pyth::new(),

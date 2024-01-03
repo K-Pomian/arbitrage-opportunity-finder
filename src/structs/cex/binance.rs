@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     FutureExt, SinkExt, StreamExt,
@@ -41,7 +41,7 @@ impl Binance {
     /*
         Subscribes to the stream providing data about the ticker/pair
     */
-    pub async fn subscribe_to_ticker(&self, ticker: &str) -> i64 {
+    pub async fn subscribe_to_ticker(&self, ticker: &str) -> Result<i64> {
         let current_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -53,9 +53,17 @@ impl Binance {
         let message = Message::Text(subscribe_request);
 
         self.write.write().await.send(message).await.unwrap();
-        self.read.write().await.next().await.unwrap().unwrap(); // The first message is a response to the subscribe request
+        let maybe_result = self.read.write().await.next().await; // The first message is a response to the subscribe request
 
-        current_timestamp
+        if let Some(inner) = maybe_result {
+            let message = String::from_utf8(inner.unwrap().into_data()).unwrap();
+            if !message.contains("\"result\":\"null\"") {
+                return Err(format!("Could not subscribe for ticker {}", ticker));
+            }
+        }
+
+        Ok(current_timestamp)
+    }
     }
 
     /*
@@ -129,7 +137,7 @@ mod test {
     #[tokio::test]
     async fn test_subscribe_to_ticker() {
         let (binance, _) = Binance::connect().await.unwrap();
-        let id = binance.subscribe_to_ticker("btcusdt").await;
+        let id = binance.subscribe_to_ticker("btcusdt").await.unwrap();
         assert!(
             id <= SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -149,7 +157,7 @@ mod test {
     #[tokio::test]
     async fn test_read_next_message() {
         let (binance, _) = Binance::connect().await.unwrap();
-        binance.subscribe_to_ticker("btcusdt").await;
+        binance.subscribe_to_ticker("btcusdt").await.unwrap();
 
         let next_message = binance.read_next_message().await.unwrap();
         assert_eq!(next_message.stream, "btcusdt@bookTicker".to_string());
