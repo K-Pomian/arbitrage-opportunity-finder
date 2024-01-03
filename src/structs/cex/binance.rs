@@ -41,7 +41,7 @@ impl Binance {
     /*
         Subscribes to the stream providing data about the ticker/pair
     */
-    pub async fn subscribe_to_ticker(&mut self, ticker: &str) -> i64 {
+    pub async fn subscribe_to_ticker(&self, ticker: &str) -> i64 {
         let current_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -128,7 +128,7 @@ mod test {
 
     #[tokio::test]
     async fn test_subscribe_to_ticker() {
-        let (mut binance, _) = Binance::connect().await.unwrap();
+        let (binance, _) = Binance::connect().await.unwrap();
         let id = binance.subscribe_to_ticker("btcusdt").await;
         assert!(
             id <= SystemTime::now()
@@ -148,7 +148,7 @@ mod test {
 
     #[tokio::test]
     async fn test_read_next_message() {
-        let (mut binance, _) = Binance::connect().await.unwrap();
+        let (binance, _) = Binance::connect().await.unwrap();
         binance.subscribe_to_ticker("btcusdt").await;
 
         let next_message = binance.read_next_message().await.unwrap();

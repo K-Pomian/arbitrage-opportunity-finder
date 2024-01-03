@@ -32,7 +32,7 @@ impl State {
     */
     pub async fn new() -> Self {
         let config = CONFIG.get_or_init(|| async { Config::new() }).await;
-        let (mut binance, _) = Binance::connect()
+        let (binance, _) = Binance::connect()
             .await
             .expect("Could not connect to Binance WS");
         binance.subscribe_to_ticker(&config.binance_ticker).await;
