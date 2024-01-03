@@ -114,10 +114,10 @@ impl ArbitrageFinder {
 
         let opportunity = ArbitrageOpportunity {
             direction: arbitrage_direction,
-            quantity,
-            estimated_profit,
-            binance_price,
-            pyth_price,
+            quantity: quantity.normalize(),
+            estimated_profit: estimated_profit.normalize().round_dp(8),
+            binance_price: binance_price.normalize(),
+            pyth_price: pyth_price.normalize(),
         };
 
         if let Some(last_opportunity) = self.last_found {
