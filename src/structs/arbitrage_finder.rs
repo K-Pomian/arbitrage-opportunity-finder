@@ -37,7 +37,7 @@ impl ArbitrageFinder {
         drop(latest_binance_ticker_data_read);
 
         let (pyth_confident_95_price_higher, pyth_confident_95_price_lower) =
-            self.get_pyth_confident_95_price(pyth_price);
+            self.calculate_pyth_confident_95_price(pyth_price);
 
         // Search for SellBinanceBuyDex opportunity
         let binance_best_bid_price = Decimal::from_str(&binance_ticker_data.b).unwrap();
@@ -116,7 +116,7 @@ impl ArbitrageFinder {
         Calculates probable (95%) price using Pyth price and confidence feed and Laplace distribution
         https://docs.pyth.network/documentation/solana-price-feeds/best-practices#confidence-intervals
     */
-    fn get_pyth_confident_95_price(&self, pyth_price: Price) -> (Decimal, Decimal) {
+    fn calculate_pyth_confident_95_price(&self, pyth_price: Price) -> (Decimal, Decimal) {
         let exponential = pyth_price.expo.abs() as u32;
         let price = Decimal::new(pyth_price.price, exponential);
         let confidence = Decimal::new(pyth_price.conf.try_into().unwrap(), exponential);
