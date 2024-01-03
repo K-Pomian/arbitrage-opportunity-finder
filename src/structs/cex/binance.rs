@@ -78,13 +78,15 @@ impl Binance {
 
         let mut read_write_lock = self.read.write().await;
 
-        let deadline = Instant::now() + Duration::from_millis(100);
-        let future = read_write_lock.next();
+        // Long deadline, bc timeout seems to mess up `read_write_lock.next()` completion time in debug mode
+        // and it's not critical for application performance, as unsubscribe is called only while terminating the application process.
+        // Moreover, it's highly unlikely that different message than containing `"result": null` is the last one.
+        let deadline = Instant::now() + Duration::from_millis(300);
         let error_context = format!("Could not unsubscribe for ticker {} and id {}", ticker, id);
 
-        while let Some(inner) = tokio::time::timeout_at(deadline, future)
+        while let Some(inner) = tokio::time::timeout_at(deadline, read_write_lock.next())
             .await
-            .context(error_context)?
+            .context(error_context.clone())?
         {
             let message = String::from_utf8(inner.unwrap().into_data()).unwrap();
             if message.contains("\"result\":null") {
