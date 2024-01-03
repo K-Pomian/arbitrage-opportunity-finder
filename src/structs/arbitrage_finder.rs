@@ -43,70 +43,26 @@ impl ArbitrageFinder {
         let binance_best_bid_price = Decimal::from_str(&binance_ticker_data.b).unwrap();
         if binance_best_bid_price.gt(&pyth_confident_95_price_higher) {
             let quantity = Decimal::from_str(&binance_ticker_data.B).unwrap();
-            let estimated_profit = (binance_best_bid_price - pyth_confident_95_price_higher)
-                .checked_mul(quantity)
-                .unwrap()
-                - quantity
-                    .checked_mul(binance_best_bid_price)
-                    .unwrap()
-                    .checked_mul(binance_fee)
-                    .unwrap();
-
-            if estimated_profit.le(&Decimal::ZERO) {
-                return None;
-            }
-
-            let opportunity = ArbitrageOpportunity {
-                direction: ArbitrageDirection::SellBinanceBuyDex,
+            return self.calculate_arbitrage_opportunity(
+                binance_best_bid_price,
+                pyth_confident_95_price_higher,
+                binance_fee,
                 quantity,
-                estimated_profit,
-                binance_price: binance_best_bid_price,
-                pyth_price: pyth_confident_95_price_higher,
-            };
-
-            if let Some(last_opportunity) = self.last_found {
-                if last_opportunity == opportunity {
-                    return None;
-                }
-            }
-            self.last_found = Some(opportunity);
-
-            return self.last_found;
+                ArbitrageDirection::SellBinanceBuyDex,
+            );
         }
 
         // Search for BuyBinanceSellDex opportunity
         let binance_best_ask_price = Decimal::from_str(&binance_ticker_data.a).unwrap();
         if binance_best_ask_price.lt(&pyth_confident_95_price_lower) {
             let quantity = Decimal::from_str(&binance_ticker_data.A).unwrap();
-            let estimated_profit = (pyth_confident_95_price_lower - binance_best_ask_price)
-                .checked_mul(quantity)
-                .unwrap()
-                - quantity
-                    .checked_mul(binance_fee)
-                    .unwrap()
-                    .checked_mul(binance_best_ask_price)
-                    .unwrap();
-
-            if estimated_profit.le(&Decimal::ZERO) {
-                return None;
-            }
-
-            let opportunity = ArbitrageOpportunity {
-                direction: ArbitrageDirection::BuyBinanceSellDex,
+            return self.calculate_arbitrage_opportunity(
+                binance_best_ask_price,
+                pyth_confident_95_price_lower,
+                binance_fee,
                 quantity,
-                estimated_profit,
-                binance_price: binance_best_ask_price,
-                pyth_price: pyth_confident_95_price_lower,
-            };
-
-            if let Some(last_opportunity) = self.last_found {
-                if last_opportunity == opportunity {
-                    return None;
-                }
-            }
-            self.last_found = Some(opportunity);
-
-            return self.last_found;
+                ArbitrageDirection::BuyBinanceSellDex,
+            );
         }
 
         None
@@ -126,6 +82,46 @@ impl ArbitrageFinder {
             price.checked_add(confidence_95).unwrap(),
             price.checked_sub(confidence_95).unwrap(),
         )
+    }
+
+    fn calculate_arbitrage_opportunity(
+        &mut self,
+        binance_price: Decimal,
+        pyth_price: Decimal,
+        binance_fee: Decimal,
+        quantity: Decimal,
+        arbitrage_direction: ArbitrageDirection,
+    ) -> Option<ArbitrageOpportunity> {
+        let estimated_profit = (binance_price - pyth_price)
+            .abs()
+            .checked_mul(quantity)
+            .unwrap()
+            - quantity
+                .checked_mul(binance_price)
+                .unwrap()
+                .checked_mul(binance_fee)
+                .unwrap();
+
+        if estimated_profit.le(&Decimal::ZERO) {
+            return None;
+        }
+
+        let opportunity = ArbitrageOpportunity {
+            direction: arbitrage_direction,
+            quantity,
+            estimated_profit,
+            binance_price,
+            pyth_price,
+        };
+
+        if let Some(last_opportunity) = self.last_found {
+            if last_opportunity == opportunity {
+                return None;
+            }
+        }
+        self.last_found = Some(opportunity);
+
+        return self.last_found;
     }
 }
 
