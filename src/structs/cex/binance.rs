@@ -41,11 +41,11 @@ impl Binance {
     /*
         Subscribes to the stream providing data about the ticker/pair
     */
-    pub async fn subscribe_to_ticker(&mut self, ticker: &str) -> u64 {
+    pub async fn subscribe_to_ticker(&mut self, ticker: &str) -> i64 {
         let current_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_millis() as u64; // don't overflow
+            .as_millis() as i64; // doesn't overflow
         let subscribe_request = format!(
             "{{\"method\":\"SUBSCRIBE\",\"params\":[\"{}@bookTicker\"],\"id\":{}}}",
             ticker, current_timestamp
@@ -134,7 +134,7 @@ mod test {
             id <= SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_millis() as u64
+                .as_millis() as i64
         );
     }
 
