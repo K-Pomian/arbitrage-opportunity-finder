@@ -6,6 +6,9 @@ use tokio::sync::RwLock;
 
 use super::cex::binance::BookTickerData;
 
+/*
+    Struct for finding arbitrage opportunities between Binance and DEXes
+*/
 pub struct ArbitrageFinder {
     last_found: Option<ArbitrageOpportunity>,
 }
@@ -84,6 +87,9 @@ impl ArbitrageFinder {
         )
     }
 
+    /*
+        Calculates estimated profit and returns Option<ArbitrageOpportunity> instance depending on the calculation
+    */
     fn calculate_arbitrage_opportunity(
         &mut self,
         binance_price: Decimal,

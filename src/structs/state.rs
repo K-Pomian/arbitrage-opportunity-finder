@@ -27,6 +27,9 @@ pub struct State {
 }
 
 impl State {
+    /*
+        Establishes connections and creates instance of State
+    */
     pub async fn new() -> Self {
         let config = CONFIG.get_or_init(|| async { Config::new() }).await;
         let (mut binance, _) = Binance::connect()
@@ -48,14 +51,23 @@ impl State {
         }
     }
 
+    /*
+        Returns a pointer to latest_pyth_price field
+    */
     pub fn get_latest_pyth_price(&self) -> Arc<RwLock<Option<Price>>> {
         self.latest_pyth_price.clone()
     }
 
+    /*
+        Returns a pointer to latest_binance_ticker_data field
+    */
     pub fn get_latest_binance_ticker_data(&self) -> Arc<RwLock<Option<BookTickerData>>> {
         self.latest_binance_ticker_data.clone()
     }
 
+    /*
+        Acquires write lock and updates value of latest_pyth_price field
+    */
     pub async fn update_latest_pyth_price(&self) {
         let maybe_price = self
             .pyth
@@ -64,7 +76,10 @@ impl State {
         *self.latest_pyth_price.write().await = maybe_price;
     }
 
-    pub async fn update_latest_binance_price(&self) {
+    /*
+        Acquires write lock and updates value of latest_binance_ticker_data field
+    */
+    pub async fn update_latest_binance_ticker_data(&self) {
         if let Some(binance_response) = self.binance.read_next_message().await {
             *self.latest_binance_ticker_data.write().await = Some(binance_response.data);
         }
@@ -74,7 +89,6 @@ impl State {
 #[cfg(test)]
 mod tests {
     use rust_decimal::Decimal;
-    use tokio::sync::OnceCell;
 
     use super::State;
     use crate::config::{Config, CONFIG};

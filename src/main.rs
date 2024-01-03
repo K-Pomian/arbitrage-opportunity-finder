@@ -35,7 +35,7 @@ async fn handle_binance_ticker_data_update() {
 
         async move {
             loop {
-                state.update_latest_binance_price().await;
+                state.update_latest_binance_ticker_data().await;
             }
         }
     });

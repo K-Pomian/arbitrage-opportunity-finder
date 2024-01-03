@@ -3,6 +3,9 @@ use tokio::sync::OnceCell;
 
 pub static CONFIG: OnceCell<Config> = OnceCell::const_new();
 
+/*
+    Struct holding CLI optional arguments
+*/
 #[derive(Parser)]
 pub struct Config {
     // Pair from Binance spot market
@@ -21,6 +24,9 @@ pub struct Config {
 }
 
 impl Config {
+    /*
+        Parses CLI arguments into Config instance
+    */
     pub fn new() -> Self {
         Self::parse()
     }
