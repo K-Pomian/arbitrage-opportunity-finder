@@ -1,12 +1,12 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use futures_util::{
     stream::{SplitSink, SplitStream},
     FutureExt, SinkExt, StreamExt,
 };
 use serde::Deserialize;
-use tokio::{net::TcpStream, sync::RwLock};
+use tokio::{net::TcpStream, sync::RwLock, time::Instant};
 use tokio_tungstenite::{
     tungstenite::{handshake::client::Response, Message},
     MaybeTlsStream, WebSocketStream,
@@ -67,6 +67,32 @@ impl Binance {
 
         Ok(current_timestamp)
     }
+
+    pub async fn unsubscribe(&self, ticker: &str, id: i64) -> Result<()> {
+        let unsubscribe_request = format!(
+            "{{\"method\":\"UNSUBSCRIBE\",\"params\":[\"{}@bookTicker\"],\"id\":{}}}",
+            ticker, id
+        );
+        let message = Message::Text(unsubscribe_request);
+        self.write.write().await.send(message).await.unwrap();
+
+        let mut read_write_lock = self.read.write().await;
+
+        let deadline = Instant::now() + Duration::from_millis(100);
+        let future = read_write_lock.next();
+        let error_context = format!("Could not unsubscribe for ticker {} and id {}", ticker, id);
+
+        while let Some(inner) = tokio::time::timeout_at(deadline, future)
+            .await
+            .context(error_context)?
+        {
+            let message = String::from_utf8(inner.unwrap().into_data()).unwrap();
+            if message.contains("\"result\":null") {
+                return Ok(());
+            }
+        }
+
+        unreachable!();
     }
 
     /*
