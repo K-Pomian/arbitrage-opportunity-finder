@@ -39,7 +39,7 @@ impl Binance {
     }
 
     /*
-        Subscribes to the stream providing data about the ticker/pair
+        Subscribes to a stream providing data about the ticker/pair
     */
     pub async fn subscribe_to_ticker(&self, ticker: &str) -> Result<i64> {
         let current_timestamp = SystemTime::now()
@@ -68,6 +68,9 @@ impl Binance {
         Ok(current_timestamp)
     }
 
+    /*
+        Unsubscribes from the stream associated with the provided ticker and id returned while subscribing to it.
+    */
     pub async fn unsubscribe(&self, ticker: &str, id: i64) -> Result<()> {
         let unsubscribe_request = format!(
             "{{\"method\":\"UNSUBSCRIBE\",\"params\":[\"{}@bookTicker\"],\"id\":{}}}",
