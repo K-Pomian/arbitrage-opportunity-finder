@@ -153,7 +153,7 @@ mod tests {
     use super::{ArbitrageDirection, ArbitrageFinder};
 
     #[test]
-    fn test_get_pyth_confident_95_price() {
+    fn test_calculate_pyth_confident_95_price() {
         let arbitrage_finder = ArbitrageFinder::new();
         let price = Price {
             price: 4856126854,
@@ -162,7 +162,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (higher, lower) = arbitrage_finder.get_pyth_confident_95_price(price);
+        let (higher, lower) = arbitrage_finder.calculate_pyth_confident_95_price(price);
         assert_eq!(lower.normalize().to_string(), "48548.284494");
         assert_eq!(higher.normalize().to_string(), "48574.252586");
     }
